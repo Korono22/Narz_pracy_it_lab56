@@ -5,12 +5,15 @@ import json
 import yaml
 import xml.etree.ElementTree as ET
 
+# Importujemy komponenty PyQt6 do zbudowania okna
+from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Program do konwersji danych między formatami XML, JSON i YAML."
     )
-    parser.add_argument("input_file", help="Ścieżka do pliku wejściowego")
-    parser.add_argument("output_file", help="Ścieżka do pliku wyjściowego")
+    parser.add_argument("input_file", nargs="?", default=None, help="Ścieżka do pliku wejściowego (opcjonalna przy GUI)")
+    parser.add_argument("output_file", nargs="?", default=None, help="Ścieżka do pliku wyjściowego (opcjonalna przy GUI)")
     args = parser.parse_args()
     return args.input_file, args.output_file
 
@@ -20,42 +23,21 @@ def validate_extensions(input_path, output_path):
     _, output_ext = os.path.splitext(output_path.lower())
     
     if input_ext not in allowed_extensions or output_ext not in allowed_extensions:
-        print("Błąd: Nieobsługiwany format pliku.")
-        sys.exit(1)
+        return False, f"Nieobsługiwany format pliku. Dozwolone: .json, .xml, .yml, .yaml"
         
-    return input_ext, output_ext
+    return True, (input_ext, output_ext)
 
 def load_json(file_path):
     if not os.path.exists(file_path):
-        print(f"Błąd: Plik wejściowy '{file_path}' nie istnieje.")
-        sys.exit(1)
-    try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            data = json.load(file)
-            print("Składnia pliku JSON jest poprawna.")
-            return data
-    except json.JSONDecodeError as e:
-        print(f"Błąd składni w pliku JSON: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Wystąpił nieoczekiwany błąd podczas odczytu pliku: {e}")
-        sys.exit(1)
+        raise FileNotFoundError(f"Plik wejściowy '{file_path}' nie istnieje.")
+    with open(file_path, 'r', encoding='utf-8') as file:
+        return json.load(file)
 
 def load_yaml(file_path):
     if not os.path.exists(file_path):
-        print(f"Błąd: Plik wejściowy '{file_path}' nie istnieje.")
-        sys.exit(1)
-    try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            data = yaml.load(file, Loader=yaml.SafeLoader)
-            print("Składnia pliku YAML jest poprawna.")
-            return data
-    except yaml.YAMLError as e:
-        print(f"Błąd składni w pliku YAML: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Wystąpił nieoczekiwany błąd podczas odczytu pliku: {e}")
-        sys.exit(1)
+        raise FileNotFoundError(f"Plik wejściowy '{file_path}' nie istnieje.")
+    with open(file_path, 'r', encoding='utf-8') as file:
+        return yaml.load(file, Loader=yaml.SafeLoader)
 
 def xml_to_dict(element):
     result = {}
@@ -78,41 +60,20 @@ def xml_to_dict(element):
 
 def load_xml(file_path):
     if not os.path.exists(file_path):
-        print(f"Błąd: Plik wejściowy '{file_path}' nie istnieje.")
-        sys.exit(1)
-    try:
-        tree = ET.parse(file_path)
-        root = tree.getroot()
-        print("Składnia pliku XML jest poprawna.")
-        return {root.tag: xml_to_dict(root)}
-    except ET.ParseError as e:
-        print(f"Błąd składni w pliku XML: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Wystąpił nieoczekiwany błąd podczas odczytu pliku: {e}")
-        sys.exit(1)
+        raise FileNotFoundError(f"Plik wejściowy '{file_path}' nie istnieje.")
+    tree = ET.parse(file_path)
+    root = tree.getroot()
+    return {root.tag: xml_to_dict(root)}
 
 def save_json(data, file_path):
-    try:
-        with open(file_path, 'w', encoding='utf-8') as file:
-            json.dump(data, file, indent=4, ensure_ascii=False)
-            print(f"Pomyślnie zapisano dane do pliku JSON: {file_path}")
-    except Exception as e:
-        print(f"Błąd podczas zapisu do pliku JSON: {e}")
-        sys.exit(1)
+    with open(file_path, 'w', encoding='utf-8') as file:
+        json.dump(data, file, indent=4, ensure_ascii=False)
 
 def save_yaml(data, file_path):
-    try:
-        with open(file_path, 'w', encoding='utf-8') as file:
-            yaml.dump(data, file, default_flow_style=False, allow_unicode=True)
-            print(f"Pomyślnie zapisano dane do pliku YAML: {file_path}")
-    except Exception as e:
-        print(f"Błąd podczas zapisu do pliku YAML: {e}")
-        sys.exit(1)
+    with open(file_path, 'w', encoding='utf-8') as file:
+        yaml.dump(data, file, default_flow_style=False, allow_unicode=True)
 
-# --- NOWE FUNKCJE POMOCNICZE DLA TASK 7 ---
 def dict_to_xml(tag, d):
-    """Konwertuje słownik z powrotem na elementy struktury XML ElementTree."""
     elem = ET.Element(tag)
     if isinstance(d, dict):
         for key, value in d.items():
@@ -130,51 +91,132 @@ def dict_to_xml(tag, d):
     return elem
 
 def save_xml(data, file_path):
-    """Zapisuje dane z obiektu do pliku XML zgodnie ze składnią."""
+    root_tag = list(data.keys())[0]
+    root_data = data[root_tag]
+    root_element = dict_to_xml(root_tag, root_data)
+    tree = ET.ElementTree(root_element)
+    ET.indent(tree, space="    ", level=0)
+    with open(file_path, 'wb') as file:
+        tree.write(file, encoding='utf-8', xml_declaration=True)
+
+def convert_files(input_path, output_path):
+    """Główny silnik konwersji wywoływany zarówno przez konsolę, jak i GUI."""
+    success, res = validate_extensions(input_path, output_path)
+    if not success:
+        return False, res
+        
+    input_ext, output_ext = res
+    
     try:
-        # Nasz parser load_xml zawsze owija dane w słownik, gdzie jedynym kluczem głównym jest root tag.
-        # Pobieramy ten tag i jego zawartość. Jeśli dane pochodzą z JSON/YAML, bierzemy pierwszy klucz słownika jako root.
-        root_tag = list(data.keys())[0]
-        root_data = data[root_tag]
-        
-        root_element = dict_to_xml(root_tag, root_data)
-        
-        # Tworzymy drzewo i dodajemy ładne wcięcia (dostępne od Pythona 3.9+)
-        tree = ET.ElementTree(root_element)
-        ET.indent(tree, space="    ", level=0)
-        
-        with open(file_path, 'wb') as file:
-            tree.write(file, encoding='utf-8', xml_declaration=True)
+        # Odczyt
+        if input_ext == '.json':
+            parsed_data = load_json(input_path)
+        elif input_ext in {'.yml', '.yaml'}:
+            parsed_data = load_yaml(input_path)
+        elif input_ext == '.xml':
+            parsed_data = load_xml(input_path)
             
-        print(f"Pomyślnie zapisano dane do pliku XML: {file_path}")
+        # Zapis
+        if output_ext == '.json':
+            save_json(parsed_data, output_path)
+        elif output_ext in {'.yml', '.yaml'}:
+            save_yaml(parsed_data, output_path)
+        elif output_ext == '.xml':
+            save_xml(parsed_data, output_path)
+            
+        return True, "Konwersja zakończona sukcesem!"
+    except json.JSONDecodeError as e:
+        return False, f"Błąd składni JSON: {e}"
+    except yaml.YAMLError as e:
+        return False, f"Błąd składni YAML: {e}"
+    except ET.ParseError as e:
+        return False, f"Błąd składni XML: {e}"
     except Exception as e:
-        print(f"Błąd podczas zapisu do pliku XML: {e}")
-        sys.exit(1)
+        return False, f"Błąd: {e}"
+
+# --- KLASA INTERFEJSU GRAFICZNEGO ---
+class ConverterApp(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.input_file_path = ""
+        self.output_file_path = ""
+        self.init_ui()
+        
+    def init_ui(self):
+        self.setWindowTitle("Konwerter XML / JSON / YAML")
+        self.resize(500, 200)
+        
+        layout = QVBoxLayout()
+        
+        # Sekcja pliku wejściowego
+        input_layout = QHBoxLayout()
+        self.lbl_input = QLabel("Nie wybrano pliku wejściowego")
+        btn_select_input = QPushButton("Wybierz plik wejściowy")
+        btn_select_input.clicked.connect(self.select_input_file)
+        input_layout.addWidget(btn_select_input)
+        input_layout.addWidget(self.lbl_input)
+        layout.addLayout(input_layout)
+        
+        # Sekcja pliku wyjściowego
+        output_layout = QHBoxLayout()
+        self.lbl_output = QLabel("Nie wybrano pliku docelowego")
+        btn_select_output = QPushButton("Ustaw plik wyjściowy")
+        btn_select_output.clicked.connect(self.select_output_file)
+        output_layout.addWidget(btn_select_output)
+        output_layout.addWidget(self.lbl_output)
+        layout.addLayout(output_layout)
+        
+        # Przycisk konwersji
+        self.btn_convert = QPushButton("Konwertuj dane")
+        self.btn_convert.clicked.connect(self.execute_conversion)
+        layout.addWidget(self.btn_convert)
+        
+        self.setLayout(layout)
+        
+    def select_input_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Wybierz plik wejściowy", "", "Wszystkie obsługiwane (*.json *.xml *.yml *.yaml);;JSON (*.json);;XML (*.xml);;YAML (*.yml *.yaml)"
+        )
+        if file_path:
+            self.input_file_path = file_path
+            self.lbl_input.setText(os.path.basename(file_path))
+            
+    def select_output_file(self):
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Ustaw miejsce zapisu pliku docelowego", "", "JSON (*.json);;XML (*.xml);;YAML (*.yml *.yaml)"
+        )
+        if file_path:
+            self.output_file_path = file_path
+            self.lbl_output.setText(os.path.basename(file_path))
+            
+    def execute_conversion(self):
+        if not self.input_file_path or not self.output_file_path:
+            QMessageBox.warning(self, "Brak danych", "Musisz wybrać plik wejściowy oraz docelowy!")
+            return
+            
+        success, message = convert_files(self.input_file_path, self.output_file_path)
+        if success:
+            QMessageBox.information(self, "Sukces", message)
+        else:
+            QMessageBox.critical(self, "Błąd", message)
 
 def main():
     input_path, output_path = parse_arguments()
-    input_ext, output_ext = validate_extensions(input_path, output_path)
     
-    parsed_data = None
-    
-    # 1. Odczyt danych
-    if input_ext == '.json':
-        parsed_data = load_json(input_path)
-    elif input_ext in {'.yml', '.yaml'}:
-        parsed_data = load_yaml(input_path)
-    elif input_ext == '.xml':
-        parsed_data = load_xml(input_path)
+    # Tryb GUI - jeśli nie podano parametrów startowych w konsoli
+    if input_path is None and output_path is None:
+        app = QApplication(sys.argv)
+        window = ConverterApp()
+        window.show()
+        sys.exit(app.exec())
+    # Tryb konsolowy - jeśli podano ścieżki jako argumenty
     else:
-        print(f"Format wejściowy {input_ext} nie jest obsługiwany.")
-        sys.exit(1)
-
-    # 2. Zapis danych (Teraz w pełni obsługujemy wszystkie 3 formaty!)
-    if output_ext == '.json':
-        save_json(parsed_data, output_path)
-    elif output_ext in {'.yml', '.yaml'}:
-        save_yaml(parsed_data, output_path)
-    elif output_ext == '.xml':
-        save_xml(parsed_data, output_path)
+        if not input_path or not output_path:
+            print("Błąd: Musisz podać dwie ścieżki plików w trybie konsolowym.")
+            sys.exit(1)
+        success, message = convert_files(input_path, output_path)
+        print(message)
+        sys.exit(0 if success else 1)
 
 if __name__ == "__main__":
     main()

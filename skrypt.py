@@ -3,6 +3,7 @@ import os
 import sys
 import json
 import yaml
+import xml.etree.ElementTree as ET  # Dodajemy wbudowaną bibliotekę do XML
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -56,6 +57,52 @@ def load_yaml(file_path):
         print(f"Wystąpił nieoczekiwany błąd podczas odczytu pliku: {e}")
         sys.exit(1)
 
+# --- NOWE FUNKCJE POMOCNICZE DLA TASK 6 ---
+def xml_to_dict(element):
+    """Konwertuje element XML i jego dzieci na słownik Pythona."""
+    result = {}
+    # Jeśli element ma atrybuty, możemy je zachować (opcjonalnie)
+    if element.attrib:
+        result["@attributes"] = element.attrib
+        
+    if element.text and element.text.strip():
+        # Jeśli element zawiera tylko tekst i nie ma dzieci
+        if len(element) == 0:
+            return element.text.strip()
+        else:
+            result["#text"] = element.text.strip()
+            
+    for child in element:
+        child_data = xml_to_dict(child)
+        if child.tag in result:
+            # Jeśli znacznik się powtarza, zamieniamy go w listę
+            if not isinstance(result[child.tag], list):
+                result[child.tag] = [result[child.tag]]
+            result[child.tag].append(child_data)
+        else:
+            result[child.tag] = child_data
+            
+    return result
+
+def load_xml(file_path):
+    """Wczytuje plik XML i weryfikuje poprawność jego składni."""
+    if not os.path.exists(file_path):
+        print(f"Błąd: Plik wejściowy '{file_path}' nie istnieje.")
+        sys.exit(1)
+        
+    try:
+        tree = ET.parse(file_path)
+        root = tree.getroot()
+        print("Składnia pliku XML jest poprawna.")
+        # Zwracamy spójną strukturę: nazwa głównego tagu jako klucz nadrzędny
+        return {root.tag: xml_to_dict(root)}
+    except ET.ParseError as e:
+        print(f"Błąd składni w pliku XML: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Wystąpił nieoczekiwany błąd podczas odczytu pliku: {e}")
+        sys.exit(1)
+
 def save_json(data, file_path):
     try:
         with open(file_path, 'w', encoding='utf-8') as file:
@@ -65,12 +112,9 @@ def save_json(data, file_path):
         print(f"Błąd podczas zapisu do pliku JSON: {e}")
         sys.exit(1)
 
-# --- NOWA FUNKCJA DLA TASK 5 ---
 def save_yaml(data, file_path):
-    """Zapisuje dane z obiektu do pliku w formacie YAML."""
     try:
         with open(file_path, 'w', encoding='utf-8') as file:
-            # allow_unicode=True dba o poprawne zapisywanie polskich znaków, a nie encji \uXXXX
             yaml.dump(data, file, default_flow_style=False, allow_unicode=True)
             print(f"Pomyślnie zapisano dane do pliku YAML: {file_path}")
     except Exception as e:
@@ -83,16 +127,18 @@ def main():
     
     parsed_data = None
     
-    # 1. Odczyt danych
+    # 1. Odczyt danych (obsługujemy JSON, YAML oraz XML)
     if input_ext == '.json':
         parsed_data = load_json(input_path)
     elif input_ext in {'.yml', '.yaml'}:
         parsed_data = load_yaml(input_path)
+    elif input_ext == '.xml':
+        parsed_data = load_xml(input_path)
     else:
         print(f"Format wejściowy {input_ext} nie jest obsługiwany.")
         sys.exit(1)
 
-    # 2. Zapis danych (obsługujemy JSON oraz YAML)
+    # 2. Zapis danych
     if output_ext == '.json':
         save_json(parsed_data, output_path)
     elif output_ext in {'.yml', '.yaml'}:

@@ -5,15 +5,15 @@ import json
 import yaml
 import xml.etree.ElementTree as ET
 
-# Importujemy komponenty PyQt6 do zbudowania okna
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFileDialog, QMessageBox
+from PyQt6.QtCore import QThread, QObject, pyqtSignal  # Dodajemy obsługę wątków i sygnałów
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Program do konwersji danych między formatami XML, JSON i YAML."
     )
-    parser.add_argument("input_file", nargs="?", default=None, help="Ścieżka do pliku wejściowego (opcjonalna przy GUI)")
-    parser.add_argument("output_file", nargs="?", default=None, help="Ścieżka do pliku wyjściowego (opcjonalna przy GUI)")
+    parser.add_argument("input_file", nargs="?", default=None, help="Ścieżka do pliku wejściowego")
+    parser.add_argument("output_file", nargs="?", default=None, help="Ścieżka do pliku wyjściowego")
     args = parser.parse_args()
     return args.input_file, args.output_file
 
@@ -21,10 +21,8 @@ def validate_extensions(input_path, output_path):
     allowed_extensions = {'.json', '.xml', '.yml', '.yaml'}
     _, input_ext = os.path.splitext(input_path.lower())
     _, output_ext = os.path.splitext(output_path.lower())
-    
     if input_ext not in allowed_extensions or output_ext not in allowed_extensions:
         return False, f"Nieobsługiwany format pliku. Dozwolone: .json, .xml, .yml, .yaml"
-        
     return True, (input_ext, output_ext)
 
 def load_json(file_path):
@@ -100,15 +98,11 @@ def save_xml(data, file_path):
         tree.write(file, encoding='utf-8', xml_declaration=True)
 
 def convert_files(input_path, output_path):
-    """Główny silnik konwersji wywoływany zarówno przez konsolę, jak i GUI."""
     success, res = validate_extensions(input_path, output_path)
     if not success:
         return False, res
-        
     input_ext, output_ext = res
-    
     try:
-        # Odczyt
         if input_ext == '.json':
             parsed_data = load_json(input_path)
         elif input_ext in {'.yml', '.yaml'}:
@@ -116,14 +110,12 @@ def convert_files(input_path, output_path):
         elif input_ext == '.xml':
             parsed_data = load_xml(input_path)
             
-        # Zapis
         if output_ext == '.json':
             save_json(parsed_data, output_path)
         elif output_ext in {'.yml', '.yaml'}:
             save_yaml(parsed_data, output_path)
         elif output_ext == '.xml':
             save_xml(parsed_data, output_path)
-            
         return True, "Konwersja zakończona sukcesem!"
     except json.JSONDecodeError as e:
         return False, f"Błąd składni JSON: {e}"
@@ -134,7 +126,20 @@ def convert_files(input_path, output_path):
     except Exception as e:
         return False, f"Błąd: {e}"
 
-# --- KLASA INTERFEJSU GRAFICZNEGO ---
+# --- NOWA KLASA WORKERA DLA ASYNCHRONICZNOŚCI (TASK 9) ---
+class ConversionWorker(QObject):
+    finished = pyqtSignal(bool, str)  # Sygnał zwracający stan (sukces, komunikat)
+
+    def __init__(self, input_path, output_path):
+        super().__init__()
+        self.input_path = input_path
+        self.output_path = output_path
+
+    def run(self):
+        """Metoda uruchamiana w osobnym wątku."""
+        success, message = convert_files(self.input_path, self.output_path)
+        self.finished.emit(success, message)
+
 class ConverterApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -143,12 +148,11 @@ class ConverterApp(QWidget):
         self.init_ui()
         
     def init_ui(self):
-        self.setWindowTitle("Konwerter XML / JSON / YAML")
+        self.setWindowTitle("Konwerter XML / JSON / YAML (Async)")
         self.resize(500, 200)
         
         layout = QVBoxLayout()
         
-        # Sekcja pliku wejściowego
         input_layout = QHBoxLayout()
         self.lbl_input = QLabel("Nie wybrano pliku wejściowego")
         btn_select_input = QPushButton("Wybierz plik wejściowy")
@@ -157,7 +161,6 @@ class ConverterApp(QWidget):
         input_layout.addWidget(self.lbl_input)
         layout.addLayout(input_layout)
         
-        # Sekcja pliku wyjściowego
         output_layout = QHBoxLayout()
         self.lbl_output = QLabel("Nie wybrano pliku docelowego")
         btn_select_output = QPushButton("Ustaw plik wyjściowy")
@@ -166,9 +169,8 @@ class ConverterApp(QWidget):
         output_layout.addWidget(self.lbl_output)
         layout.addLayout(output_layout)
         
-        # Przycisk konwersji
         self.btn_convert = QPushButton("Konwertuj dane")
-        self.btn_convert.clicked.connect(self.execute_conversion)
+        self.btn_convert.clicked.connect(self.execute_conversion_async)
         layout.addWidget(self.btn_convert)
         
         self.setLayout(layout)
@@ -183,18 +185,38 @@ class ConverterApp(QWidget):
             
     def select_output_file(self):
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "Ustaw miejsce zapisu pliku docelowego", "", "JSON (*.json);;XML (*.xml);;YAML (*.yml *.yaml)"
+            self, "Ustaw miejsce zapisu", "", "JSON (*.json);;XML (*.xml);;YAML (*.yml *.yaml)"
         )
         if file_path:
             self.output_file_path = file_path
             self.lbl_output.setText(os.path.basename(file_path))
             
-    def execute_conversion(self):
+    # Zmodyfikowana funkcja uruchamiająca wątek w tle
+    def execute_conversion_async(self):
         if not self.input_file_path or not self.output_file_path:
-            QMessageBox.warning(self, "Brak danych", "Musisz wybrać plik wejściowy oraz docelowy!")
+            QMessageBox.warning(self, "Brak danych", "Musisz wybrać oba pliki!")
             return
             
-        success, message = convert_files(self.input_file_path, self.output_file_path)
+        self.btn_convert.setEnabled(False)  # Blokujemy przycisk na czas operacji
+        
+        # Tworzenie nowego wątku i workera
+        self.thread = QThread()
+        self.worker = ConversionWorker(self.input_file_path, self.output_file_path)
+        self.worker.moveToThread(self.thread)
+        
+        # Łączenie zdarzeń
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        
+        # Odbiór wyniku konwersji
+        self.worker.finished.connect(self.on_conversion_finished)
+        
+        self.thread.start()
+        
+    def on_conversion_finished(self, success, message):
+        self.btn_convert.setEnabled(True)  # Przywracamy przycisk
         if success:
             QMessageBox.information(self, "Sukces", message)
         else:
@@ -202,14 +224,11 @@ class ConverterApp(QWidget):
 
 def main():
     input_path, output_path = parse_arguments()
-    
-    # Tryb GUI - jeśli nie podano parametrów startowych w konsoli
     if input_path is None and output_path is None:
         app = QApplication(sys.argv)
         window = ConverterApp()
         window.show()
         sys.exit(app.exec())
-    # Tryb konsolowy - jeśli podano ścieżki jako argumenty
     else:
         if not input_path or not output_path:
             print("Błąd: Musisz podać dwie ścieżki plików w trybie konsolowym.")

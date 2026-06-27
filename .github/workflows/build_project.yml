@@ -1,0 +1,49 @@
+# Ustawienie nazwy workflow [cite: 36]
+name: Zbuduje plik exe
+
+# Uruchomienie workflow (schedule, push, manualnie)
+on:
+  # a) Automatycznie raz w tygodniu (np. w każdą niedzielę o 00:00)
+  schedule:
+    - cron: '0 0 * * 0'
+  
+  # b) Automatycznie po pushowaniu na mastera 
+  push:
+    branches:
+      - master
+
+  # c) Ręcznie przez usera (workflow_dispatch)
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Ustawienie najnowszego dostępnego serwera Windows
+    runs-on: windows-latest
+
+    steps:
+    # Krok 1: Pobranie kodu z repozytorium na serwer GitHub Actions
+    - name: Checkout repository
+      uses: actions/checkout
+
+    # Krok 2: Konfiguracja środowiska Python na maszynie budującej
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.14.6'
+
+    # Krok 3: Instalacja komponentów przy użyciu  skryptu installResources.ps1
+    - name: Zainstaluj komponenty
+      run: |
+        .\installResources.ps1
+
+    # Krok 4: Kompilacja skryptu do jednego pliku .exe bez konsoli
+    - name: Zbuduj plik exe
+      run: |
+        pyinstaller --onefile --noconsole skrypt.py
+
+    # Krok 5: Przesłanie utworzonego pliku .exe jako artefakt na repozytorium GitHub
+    - name: Upload Artifact
+      uses: actions/upload-artifact
+      with:
+        name: Converter-Windows-Exec
+        path: dist/skrypt.exe

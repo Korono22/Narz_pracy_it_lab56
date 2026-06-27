@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 import json
+import yaml  # Dodajemy bibliotekę do obsługi YAML (z pakietu pyyaml)
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -27,7 +28,6 @@ def load_json(file_path):
     if not os.path.exists(file_path):
         print(f"Błąd: Plik wejściowy '{file_path}' nie istnieje.")
         sys.exit(1)
-        
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             data = json.load(file)
@@ -40,12 +40,29 @@ def load_json(file_path):
         print(f"Wystąpił nieoczekiwany błąd podczas odczytu pliku: {e}")
         sys.exit(1)
 
-# --- NOWA FUNKCJA DLA TASK 3 ---
+# --- NOWA FUNKCJA DLA TASK 4 ---
+def load_yaml(file_path):
+    """Wczytuje plik YAML i weryfikuje poprawność jego składni."""
+    if not os.path.exists(file_path):
+        print(f"Błąd: Plik wejściowy '{file_path}' nie istnieje.")
+        sys.exit(1)
+        
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            # SafeLoader zabezpiecza przed uruchomieniem niepożądanego kodu zaszytego w YAML
+            data = yaml.load(file, Loader=yaml.SafeLoader)
+            print("Składnia pliku YAML jest poprawna.")
+            return data
+    except yaml.YAMLError as e:
+        print(f"Błąd składni w pliku YAML: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Wystąpił nieoczekiwany błąd podczas odczytu pliku: {e}")
+        sys.exit(1)
+
 def save_json(data, file_path):
-    """Zapisuje dane z obiektu do pliku w formacie JSON."""
     try:
         with open(file_path, 'w', encoding='utf-8') as file:
-            # indent=4 tworzy ładne wcięcia, ensure_ascii=False dba o poprawne kodowanie polskich znaków
             json.dump(data, file, indent=4, ensure_ascii=False)
             print(f"Pomyślnie zapisano dane do pliku JSON: {file_path}")
     except Exception as e:
@@ -58,14 +75,16 @@ def main():
     
     parsed_data = None
     
-    # 1. Odczyt danych (na razie obsługujemy tylko wejście JSON)
+    # 1. Odczyt danych (obsługujemy JSON oraz YAML)
     if input_ext == '.json':
         parsed_data = load_json(input_path)
+    elif input_ext in {'.yml', '.yaml'}:
+        parsed_data = load_yaml(input_path)
     else:
         print(f"Format wejściowy {input_ext} nie jest jeszcze obsługiwany jako źródło.")
         sys.exit(1)
 
-    # 2. Zapis danych (jeśli wyjściem ma być JSON)
+    # 2. Zapis danych
     if output_ext == '.json':
         save_json(parsed_data, output_path)
     else:

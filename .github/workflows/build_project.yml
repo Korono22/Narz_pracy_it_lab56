@@ -1,5 +1,5 @@
 # Ustawienie nazwy workflow [cite: 36]
-name: Zbuduje plik exe
+name: Zbuduj plik exe
 
 # Uruchomienie workflow (schedule, push, manualnie)
 on:

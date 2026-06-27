@@ -1,7 +1,7 @@
 import argparse
 import os
 import sys
-import json  # Dodajemy wbudowaną bibliotekę do JSON
+import json
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -23,9 +23,7 @@ def validate_extensions(input_path, output_path):
         
     return input_ext, output_ext
 
-# --- NOWA FUNKCJA DLA TASK 2 ---
 def load_json(file_path):
-    """Wczytuje plik JSON i weryfikuje poprawność jego składni."""
     if not os.path.exists(file_path):
         print(f"Błąd: Plik wejściowy '{file_path}' nie istnieje.")
         sys.exit(1)
@@ -42,19 +40,36 @@ def load_json(file_path):
         print(f"Wystąpił nieoczekiwany błąd podczas odczytu pliku: {e}")
         sys.exit(1)
 
+# --- NOWA FUNKCJA DLA TASK 3 ---
+def save_json(data, file_path):
+    """Zapisuje dane z obiektu do pliku w formacie JSON."""
+    try:
+        with open(file_path, 'w', encoding='utf-8') as file:
+            # indent=4 tworzy ładne wcięcia, ensure_ascii=False dba o poprawne kodowanie polskich znaków
+            json.dump(data, file, indent=4, ensure_ascii=False)
+            print(f"Pomyślnie zapisano dane do pliku JSON: {file_path}")
+    except Exception as e:
+        print(f"Błąd podczas zapisu do pliku JSON: {e}")
+        sys.exit(1)
+
 def main():
     input_path, output_path = parse_arguments()
     input_ext, output_ext = validate_extensions(input_path, output_path)
     
-    # Słownik, w którym będziemy przechowywać sparsowane dane
     parsed_data = None
     
-    # Jeśli plik wejściowy to JSON, wczytujemy go
+    # 1. Odczyt danych (na razie obsługujemy tylko wejście JSON)
     if input_ext == '.json':
         parsed_data = load_json(input_path)
-        print(f"Wczytane dane: {parsed_data}")
     else:
-        print(f"Format wejściowy {input_ext} zostanie obsłużony w kolejnych krokach.")
+        print(f"Format wejściowy {input_ext} nie jest jeszcze obsługiwany jako źródło.")
+        sys.exit(1)
+
+    # 2. Zapis danych (jeśli wyjściem ma być JSON)
+    if output_ext == '.json':
+        save_json(parsed_data, output_path)
+    else:
+        print(f"Format wyjściowy {output_ext} zostanie obsłużony w kolejnych krokach.")
 
 if __name__ == "__main__":
     main()

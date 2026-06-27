@@ -23,7 +23,7 @@ jobs:
     steps:
     # Krok 1: Pobranie kodu z repozytorium na serwer GitHub Actions
     - name: Checkout repository
-      uses: actions/checkout
+      uses: actions/checkout@v7
 
     # Krok 2: Konfiguracja środowiska Python na maszynie budującej
     - name: Set up Python
@@ -43,7 +43,7 @@ jobs:
 
     # Krok 5: Przesłanie utworzonego pliku .exe jako artefakt na repozytorium GitHub
     - name: Upload Artifact
-      uses: actions/upload-artifact
+      uses: actions/upload-artifact@v7
       with:
         name: Converter-Windows-Exec
         path: dist/skrypt.exe

@@ -2,7 +2,7 @@ import argparse
 import os
 import sys
 import json
-import yaml  # Dodajemy bibliotekę do obsługi YAML (z pakietu pyyaml)
+import yaml
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -40,16 +40,12 @@ def load_json(file_path):
         print(f"Wystąpił nieoczekiwany błąd podczas odczytu pliku: {e}")
         sys.exit(1)
 
-# --- NOWA FUNKCJA DLA TASK 4 ---
 def load_yaml(file_path):
-    """Wczytuje plik YAML i weryfikuje poprawność jego składni."""
     if not os.path.exists(file_path):
         print(f"Błąd: Plik wejściowy '{file_path}' nie istnieje.")
         sys.exit(1)
-        
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
-            # SafeLoader zabezpiecza przed uruchomieniem niepożądanego kodu zaszytego w YAML
             data = yaml.load(file, Loader=yaml.SafeLoader)
             print("Składnia pliku YAML jest poprawna.")
             return data
@@ -69,24 +65,38 @@ def save_json(data, file_path):
         print(f"Błąd podczas zapisu do pliku JSON: {e}")
         sys.exit(1)
 
+# --- NOWA FUNKCJA DLA TASK 5 ---
+def save_yaml(data, file_path):
+    """Zapisuje dane z obiektu do pliku w formacie YAML."""
+    try:
+        with open(file_path, 'w', encoding='utf-8') as file:
+            # allow_unicode=True dba o poprawne zapisywanie polskich znaków, a nie encji \uXXXX
+            yaml.dump(data, file, default_flow_style=False, allow_unicode=True)
+            print(f"Pomyślnie zapisano dane do pliku YAML: {file_path}")
+    except Exception as e:
+        print(f"Błąd podczas zapisu do pliku YAML: {e}")
+        sys.exit(1)
+
 def main():
     input_path, output_path = parse_arguments()
     input_ext, output_ext = validate_extensions(input_path, output_path)
     
     parsed_data = None
     
-    # 1. Odczyt danych (obsługujemy JSON oraz YAML)
+    # 1. Odczyt danych
     if input_ext == '.json':
         parsed_data = load_json(input_path)
     elif input_ext in {'.yml', '.yaml'}:
         parsed_data = load_yaml(input_path)
     else:
-        print(f"Format wejściowy {input_ext} nie jest jeszcze obsługiwany jako źródło.")
+        print(f"Format wejściowy {input_ext} nie jest obsługiwany.")
         sys.exit(1)
 
-    # 2. Zapis danych
+    # 2. Zapis danych (obsługujemy JSON oraz YAML)
     if output_ext == '.json':
         save_json(parsed_data, output_path)
+    elif output_ext in {'.yml', '.yaml'}:
+        save_yaml(parsed_data, output_path)
     else:
         print(f"Format wyjściowy {output_ext} zostanie obsłużony w kolejnych krokach.")
 
